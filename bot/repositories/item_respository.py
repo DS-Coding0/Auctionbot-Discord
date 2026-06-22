@@ -1,6 +1,6 @@
 from db.repository import Repository
 from db.session import SessionLocal
-from db.modals import Item
+from db.models import Item
 
 
 class ItemRepository(Repository):

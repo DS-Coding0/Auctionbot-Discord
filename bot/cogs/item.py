@@ -1,18 +1,18 @@
 from discord import app_commands
 from discord.ext import commands
 
-from bot.services.item_service import ItemService
+from db.repository import Repository
 
 
 class ItemsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.service = ItemService()
+        self.repo = Repository()
 
     @app_commands.command(name='items', description='List items in a show')
     @app_commands.describe(show_id='Show ID')
     async def list_items(self, interaction, show_id: int | None = None):
-        items = self.service.list_items(show_id=show_id)
+        items = self.repo.list_items(show_id=show_id)
         if not items:
             return await interaction.response.send_message('No items found.', ephemeral=True)
         lines = [f'#{item.id} | {item.title} | {item.status} | start={item.start_price}' for item in items[:10]]
@@ -21,7 +21,7 @@ class ItemsCog(commands.Cog):
     @app_commands.command(name='create_item', description='Create an item in a show')
     @app_commands.describe(show_id='Show ID', title='Item title', description='Optional description')
     async def create_item(self, interaction, show_id: int, title: str, description: str | None = None, image_url: str | None = None, start_price: float = 0, instant_buy_price: float | None = None, min_increment: float = 1, status: str = 'draft'):
-        item = self.service.create_item(
+        item = self.repo.create_item(
             show_id=show_id,
             title=title,
             description=description,
