@@ -1,0 +1,128 @@
+Auctiobot-Discord/
+├── .env
+├── .env.example
+├── docker-compose.yml
+├── requirements.txt
+├── main.py
+├── README.md
+├── PROJECT_STRUCTURE.txt
+│
+├── bot/
+│   ├── __init__.py
+│   ├── client.py
+│   ├── config.py
+│   ├── intents.py
+│   │
+│   ├── cogs/
+│   │   ├── __init__.py
+│   │   ├── registration.py
+│   │   ├── shows.py
+│   │   ├── auctions.py
+│   │   ├── orders.py
+│   │   ├── ratings.py
+│   │   └── admin.py
+│   │
+│   ├── views/
+│   │   ├── __init__.py
+│   │   ├── auction_view.py
+│   │   ├── show_view.py
+│   │   └── admin_view.py
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── auction_service.py
+│   │   ├── show_service.py
+│   │   ├── order_service.py
+│   │   ├── rating_service.py
+│   │   ├── audit_service.py
+│   │   └── reminder_service.py
+│   │
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── embeds.py
+│   │   ├── checks.py
+│   │   ├── time.py
+│   │   └── constants.py
+│   │
+│   └── tasks/
+│       ├── __init__.py
+│       ├── auction_loops.py
+│       ├── reminder_loops.py
+│       └── recovery.py
+│
+├── db/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── schema.sql
+│   ├── session.py
+│   ├── repository.py
+│   ├── migrations/
+│   │   ├── .gitkeep
+│   │   └── versions/
+│   │       └── .gitkeep
+│   └── seed/
+│       └── .gitkeep
+│
+├── web/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── index.html
+│   ├── .env.example
+│   │
+│   ├── server/
+│   │   ├── index.js
+│   │   ├── auth.js
+│   │   ├── db.js
+│   │   ├── routes/
+│   │   │   ├── me.js
+│   │   │   ├── ratings.js
+│   │   │   ├── bans.js
+│   │   │   ├── shows.js
+│   │   │   ├── items.js
+│   │   │   ├── auctions.js
+|   |   |   ├── orders.js
+│   │   │   └── logs.js
+│   │   └── middleware/
+│   │       ├── requireAuth.js
+│   │       └── requireSeller.js
+│   │
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx
+│       ├── api/
+│       │   ├── client.js
+│       │   ├── shows.js
+│       │   └── items.js
+│       ├── components/
+│       │   ├── Layout.jsx
+│       │   ├── Sidebar.jsx
+│       │   ├── DashboardCard.jsx
+│       │   ├── ShowForm.jsx
+│       │   ├── ItemForm.jsx
+│       │   ├── ItemTable.jsx
+│       │   └── LoginButton.jsx
+│       ├── pages/
+│       │   ├── Dashboard.jsx
+│       │   ├── Shows.jsx
+│       │   ├── Items.jsx
+│       │   ├── Auctions.jsx
+│       │   ├── Orders.ejs
+│       │   └── Login.jsx
+│       └── styles/
+│           └── app.css
+│
+├── deploy/
+│   ├── bot.Dockerfile
+│   ├── web.Dockerfile
+│   └── nginx.conf
+│
+├── scripts/
+│   ├── init.sql
+│   ├── backup.sh
+│   └── restore.sh
+│
+└── docs/
+    ├── pflichtenheft.md
+    ├── architecture.md
+    ├── deployment.md
+    └── api.md
