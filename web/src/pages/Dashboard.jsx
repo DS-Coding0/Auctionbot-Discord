@@ -1,29 +1,29 @@
 import { useEffect, useState } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { getOrders } from '../api/orders.js'
 import client from '../api/client.js'
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null)
+  const { user } = useOutletContext()
   const [orders, setOrders] = useState([])
   const [auctions, setAuctions] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
+
     async function load() {
       try {
-        const [me, orderData, auctionData] = await Promise.all([
-          client.get('/me'),
+        const [orderData, auctionData] = await Promise.all([
           getOrders('all'),
           client.get('/auctions')
         ])
         if (!alive) return
-        setUser(me)
         setOrders(Array.isArray(orderData) ? orderData : [])
         setAuctions(Array.isArray(auctionData) ? auctionData : [])
-      } catch {
+      } catch (error) {
+        console.error('Dashboard load failed:', error)
         if (alive) {
-          setUser(null)
           setOrders([])
           setAuctions([])
         }
@@ -31,6 +31,7 @@ export default function Dashboard() {
         if (alive) setLoading(false)
       }
     }
+
     load()
     return () => { alive = false }
   }, [])

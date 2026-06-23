@@ -3,4 +3,5 @@ WORKDIR /app
 COPY web/package.json ./
 RUN npm install
 COPY web ./
-CMD ["npm", "run", "dev:server"]
+EXPOSE 3001
+CMD ["node", "server/index.js"]

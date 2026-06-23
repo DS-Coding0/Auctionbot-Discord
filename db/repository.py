@@ -1,265 +1,390 @@
 from __future__ import annotations
 
-from typing import Optional, Iterable
-from sqlalchemy.orm import Session
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .session import SessionLocal
 from .models import (
-    Server,
-    User,
-    Show,
-    Item,
+    AuditLog,
     Auction,
+    Item,
     Order,
     Rating,
     SellerBannedBuyer,
-    AuditLog,
+    Server,
+    Show,
+    User,
 )
+from .session import SessionLocal
 
 
 class Repository:
-    def __init__(self, db: Session | None = None):
-        self.db = db or SessionLocal()
+    def __init__(self, db: AsyncSession | None = None):
+        self.db = db
+        self._own_session = db is None
 
-    def close(self):
-        self.db.close()
+    async def _get_db(self) -> AsyncSession:
+        if self.db is None:
+            self.db = SessionLocal()
+        return self.db
 
-    def commit(self):
-        self.db.commit()
+    async def close(self):
+        if self.db is not None and self._own_session:
+            await self.db.close()
 
-    def refresh(self, obj):
-        self.db.refresh(obj)
+    async def commit(self):
+        db = await self._get_db()
+        await db.commit()
+
+    async def refresh(self, obj):
+        db = await self._get_db()
+        await db.refresh(obj)
         return obj
 
-    def add(self, obj):
-        self.db.add(obj)
-        self.db.commit()
-        self.db.refresh(obj)
+    async def add(self, obj):
+        db = await self._get_db()
+        db.add(obj)
+        await db.commit()
+        await db.refresh(obj)
         return obj
 
-    def delete(self, obj):
-        self.db.delete(obj)
-        self.db.commit()
+    async def delete(self, obj):
+        db = await self._get_db()
+        await db.delete(obj)
+        await db.commit()
 
-    def get_server(self, server_id: int) -> Optional[Server]:
-        return self.db.get(Server, server_id)
+    async def get_server(self, server_id: int) -> Server | None:
+        db = await self._get_db()
+        return await db.get(Server, server_id)
 
-    def get_or_create_server(self, server_id: int, name: str) -> Server:
-        server = self.get_server(server_id)
+    async def get_or_create_server(self, server_id: int, name: str) -> Server:
+        db = await self._get_db()
+        server = await self.get_server(server_id)
         if server:
             if name and server.name != name:
                 server.name = name
-                self.db.commit()
-                self.db.refresh(server)
+                await db.commit()
+                await db.refresh(server)
             return server
+
         server = Server(id=server_id, name=name)
-        return self.add(server)
+        return await self.add(server)
 
-    def get_user_by_discord_id(self, discord_id: str) -> Optional[User]:
-        return self.db.query(User).filter(User.discord_id == discord_id).first()
+    async def get_user_by_discord_id(self, discord_id: str) -> User | None:
+        db = await self._get_db()
+        result = await db.execute(
+            select(User).where(User.discord_id == discord_id)
+        )
+        return result.scalars().first()
 
-    def get_user(self, user_id: int) -> Optional[User]:
-        return self.db.get(User, user_id)
+    async def get_user(self, user_id: int) -> User | None:
+        db = await self._get_db()
+        return await db.get(User, user_id)
 
-    def get_or_create_user(
+    async def get_or_create_user(
         self,
         discord_id: str,
         username: str,
         global_name: str | None = None,
         avatar: str | None = None,
-        role: str = 'buyer',
+        role: str = "buyer",
     ) -> User:
-        user = self.get_user_by_discord_id(discord_id)
+        db = await self._get_db()
+        user = await self.get_user_by_discord_id(discord_id)
+
         if user:
             user.username = username or user.username
             user.global_name = global_name
             user.avatar = avatar
             user.role = role or user.role
-            self.db.commit()
-            self.db.refresh(user)
+            await db.commit()
+            await db.refresh(user)
             return user
-        user = User(discord_id=discord_id, username=username, global_name=global_name, avatar=avatar, role=role)
-        return self.add(user)
 
-    def list_shows(self, server_id: int | None = None, seller_id: int | None = None, status: str | None = None) -> list[Show]:
-        q = self.db.query(Show)
+        user = User(
+            discord_id=discord_id,
+            username=username,
+            global_name=global_name,
+            avatar=avatar,
+            role=role,
+        )
+        return await self.add(user)
+
+    async def list_shows(
+        self,
+        server_id: int | None = None,
+        seller_id: int | None = None,
+        status: str | None = None,
+    ) -> list[Show]:
+        db = await self._get_db()
+        stmt = select(Show)
+
         if server_id is not None:
-            q = q.filter(Show.server_id == server_id)
+            stmt = stmt.where(Show.server_id == server_id)
         if seller_id is not None:
-            q = q.filter(Show.seller_id == seller_id)
+            stmt = stmt.where(Show.seller_id == seller_id)
         if status is not None:
-            q = q.filter(Show.status == status)
-        return q.order_by(Show.created_at.desc()).all()
+            stmt = stmt.where(Show.status == status)
 
-    def get_show(self, show_id: int) -> Optional[Show]:
-        return self.db.get(Show, show_id)
+        stmt = stmt.order_by(Show.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def create_show(self, **kwargs) -> Show:
-        return self.add(Show(**kwargs))
+    async def get_show(self, show_id: int) -> Show | None:
+        db = await self._get_db()
+        return await db.get(Show, show_id)
 
-    def update_show(self, show_id: int, **kwargs) -> Optional[Show]:
-        show = self.get_show(show_id)
+    async def create_show(self, **kwargs) -> Show:
+        return await self.add(Show(**kwargs))
+
+    async def update_show(self, show_id: int, **kwargs) -> Show | None:
+        db = await self._get_db()
+        show = await self.get_show(show_id)
         if not show:
             return None
+
         for key, value in kwargs.items():
             if hasattr(show, key):
                 setattr(show, key, value)
-        self.db.commit()
-        self.db.refresh(show)
+
+        await db.commit()
+        await db.refresh(show)
         return show
 
-    def delete_show(self, show_id: int) -> bool:
-        show = self.get_show(show_id)
+    async def delete_show(self, show_id: int) -> bool:
+        show = await self.get_show(show_id)
         if not show:
             return False
-        self.delete(show)
+
+        await self.delete(show)
         return True
 
-    def list_items(self, show_id: int | None = None, status: str | None = None) -> list[Item]:
-        q = self.db.query(Item)
+    async def list_items(
+        self,
+        show_id: int | None = None,
+        status: str | None = None,
+    ) -> list[Item]:
+        db = await self._get_db()
+        stmt = select(Item)
+
         if show_id is not None:
-            q = q.filter(Item.show_id == show_id)
+            stmt = stmt.where(Item.show_id == show_id)
         if status is not None:
-            q = q.filter(Item.status == status)
-        return q.order_by(Item.created_at.desc()).all()
+            stmt = stmt.where(Item.status == status)
 
-    def get_item(self, item_id: int) -> Optional[Item]:
-        return self.db.get(Item, item_id)
+        stmt = stmt.order_by(Item.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def create_item(self, **kwargs) -> Item:
-        return self.add(Item(**kwargs))
+    async def get_item(self, item_id: int) -> Item | None:
+        db = await self._get_db()
+        return await db.get(Item, item_id)
 
-    def update_item(self, item_id: int, **kwargs) -> Optional[Item]:
-        item = self.get_item(item_id)
+    async def create_item(self, **kwargs) -> Item:
+        return await self.add(Item(**kwargs))
+
+    async def update_item(self, item_id: int, **kwargs) -> Item | None:
+        db = await self._get_db()
+        item = await self.get_item(item_id)
         if not item:
             return None
+
         for key, value in kwargs.items():
             if hasattr(item, key):
                 setattr(item, key, value)
-        self.db.commit()
-        self.db.refresh(item)
+
+        await db.commit()
+        await db.refresh(item)
         return item
 
-    def delete_item(self, item_id: int) -> bool:
-        item = self.get_item(item_id)
+    async def delete_item(self, item_id: int) -> bool:
+        item = await self.get_item(item_id)
         if not item:
             return False
-        self.delete(item)
+
+        await self.delete(item)
         return True
 
-    def list_auctions(self, show_id: int | None = None, status: str | None = None) -> list[Auction]:
-        q = self.db.query(Auction)
+    async def list_auctions(
+        self,
+        show_id: int | None = None,
+        status: str | None = None,
+    ) -> list[Auction]:
+        db = await self._get_db()
+        stmt = select(Auction)
+
         if show_id is not None:
-            q = q.filter(Auction.show_id == show_id)
+            stmt = stmt.where(Auction.show_id == show_id)
         if status is not None:
-            q = q.filter(Auction.status == status)
-        return q.order_by(Auction.created_at.desc()).all()
+            stmt = stmt.where(Auction.status == status)
 
-    def get_auction(self, auction_id: int) -> Optional[Auction]:
-        return self.db.get(Auction, auction_id)
+        stmt = stmt.order_by(Auction.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def create_auction(self, **kwargs) -> Auction:
-        return self.add(Auction(**kwargs))
+    async def get_auction(self, auction_id: int) -> Auction | None:
+        db = await self._get_db()
+        return await db.get(Auction, auction_id)
 
-    def update_auction(self, auction_id: int, **kwargs) -> Optional[Auction]:
-        auction = self.get_auction(auction_id)
+    async def create_auction(self, **kwargs) -> Auction:
+        return await self.add(Auction(**kwargs))
+
+    async def update_auction(self, auction_id: int, **kwargs) -> Auction | None:
+        db = await self._get_db()
+        auction = await self.get_auction(auction_id)
         if not auction:
             return None
+
         for key, value in kwargs.items():
             if hasattr(auction, key):
                 setattr(auction, key, value)
-        self.db.commit()
-        self.db.refresh(auction)
+
+        await db.commit()
+        await db.refresh(auction)
         return auction
 
-    def delete_auction(self, auction_id: int) -> bool:
-        auction = self.get_auction(auction_id)
+    async def delete_auction(self, auction_id: int) -> bool:
+        auction = await self.get_auction(auction_id)
         if not auction:
             return False
-        self.delete(auction)
+
+        await self.delete(auction)
         return True
 
-    def list_orders(self, buyer_id: int | None = None, seller_id: int | None = None, status: str | None = None) -> list[Order]:
-        q = self.db.query(Order)
+    async def list_orders(
+        self,
+        buyer_id: int | None = None,
+        seller_id: int | None = None,
+        status: str | None = None,
+    ) -> list[Order]:
+        db = await self._get_db()
+        stmt = select(Order)
+
         if buyer_id is not None:
-            q = q.filter(Order.buyer_id == buyer_id)
+            stmt = stmt.where(Order.buyer_id == buyer_id)
         if seller_id is not None:
-            q = q.filter(Order.seller_id == seller_id)
+            stmt = stmt.where(Order.seller_id == seller_id)
         if status is not None:
-            q = q.filter(Order.status == status)
-        return q.order_by(Order.created_at.desc()).all()
+            stmt = stmt.where(Order.status == status)
 
-    def get_order(self, order_id: int) -> Optional[Order]:
-        return self.db.get(Order, order_id)
+        stmt = stmt.order_by(Order.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def create_order(self, **kwargs) -> Order:
-        return self.add(Order(**kwargs))
+    async def get_order(self, order_id: int) -> Order | None:
+        db = await self._get_db()
+        return await db.get(Order, order_id)
 
-    def update_order(self, order_id: int, **kwargs) -> Optional[Order]:
-        order = self.get_order(order_id)
+    async def create_order(self, **kwargs) -> Order:
+        return await self.add(Order(**kwargs))
+
+    async def update_order(self, order_id: int, **kwargs) -> Order | None:
+        db = await self._get_db()
+        order = await self.get_order(order_id)
         if not order:
             return None
+
         for key, value in kwargs.items():
             if hasattr(order, key):
                 setattr(order, key, value)
-        self.db.commit()
-        self.db.refresh(order)
+
+        await db.commit()
+        await db.refresh(order)
         return order
 
-    def delete_order(self, order_id: int) -> bool:
-        order = self.get_order(order_id)
+    async def delete_order(self, order_id: int) -> bool:
+        order = await self.get_order(order_id)
         if not order:
             return False
-        self.delete(order)
+
+        await self.delete(order)
         return True
 
-    def list_ratings(self, target_user_id: int | None = None, rater_id: int | None = None, show_id: int | None = None) -> list[Rating]:
-        q = self.db.query(Rating)
+    async def list_ratings(
+        self,
+        target_user_id: int | None = None,
+        rater_id: int | None = None,
+        show_id: int | None = None,
+    ) -> list[Rating]:
+        db = await self._get_db()
+        stmt = select(Rating)
+
         if target_user_id is not None:
-            q = q.filter(Rating.target_user_id == target_user_id)
+            stmt = stmt.where(Rating.target_user_id == target_user_id)
         if rater_id is not None:
-            q = q.filter(Rating.rater_id == rater_id)
+            stmt = stmt.where(Rating.rater_id == rater_id)
         if show_id is not None:
-            q = q.filter(Rating.show_id == show_id)
-        return q.order_by(Rating.created_at.desc()).all()
+            stmt = stmt.where(Rating.show_id == show_id)
 
-    def create_rating(self, **kwargs) -> Rating:
-        rating = Rating(**kwargs)
-        return self.add(rating)
+        stmt = stmt.order_by(Rating.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
 
-    def get_ban(self, seller_id: int, buyer_id: int) -> Optional[SellerBannedBuyer]:
-        return self.db.query(SellerBannedBuyer).filter(
-            SellerBannedBuyer.seller_id == seller_id,
-            SellerBannedBuyer.buyer_id == buyer_id,
-        ).first()
+    async def create_rating(self, **kwargs) -> Rating:
+        return await self.add(Rating(**kwargs))
 
-    def is_buyer_banned(self, seller_id: int, buyer_id: int) -> bool:
-        ban = self.db.query(SellerBannedBuyer).filter(
-            SellerBannedBuyer.seller_id == seller_id,
-            SellerBannedBuyer.buyer_id == buyer_id,
-            SellerBannedBuyer.active.is_(True),
-        ).first()
+    async def get_ban(self, seller_id: int, buyer_id: int) -> SellerBannedBuyer | None:
+        db = await self._get_db()
+        result = await db.execute(
+            select(SellerBannedBuyer).where(
+                SellerBannedBuyer.seller_id == seller_id,
+                SellerBannedBuyer.buyer_id == buyer_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def is_buyer_banned(self, seller_id: int, buyer_id: int) -> bool:
+        db = await self._get_db()
+        result = await db.execute(
+            select(SellerBannedBuyer).where(
+                SellerBannedBuyer.seller_id == seller_id,
+                SellerBannedBuyer.buyer_id == buyer_id,
+                SellerBannedBuyer.active.is_(True),
+            )
+        )
+        ban = result.scalars().first()
         return ban is not None
 
-    def upsert_ban(self, seller_id: int, buyer_id: int, reason: str | None = None, active: bool = True) -> SellerBannedBuyer:
-        ban = self.get_ban(seller_id, buyer_id)
+    async def upsert_ban(
+        self,
+        seller_id: int,
+        buyer_id: int,
+        reason: str | None = None,
+        active: bool = True,
+    ) -> SellerBannedBuyer:
+        db = await self._get_db()
+        ban = await self.get_ban(seller_id, buyer_id)
+
         if ban:
             ban.reason = reason
             ban.active = active
-            self.db.commit()
-            self.db.refresh(ban)
+            await db.commit()
+            await db.refresh(ban)
             return ban
-        ban = SellerBannedBuyer(seller_id=seller_id, buyer_id=buyer_id, reason=reason, active=active)
-        return self.add(ban)
 
-    def list_bans(self, seller_id: int | None = None, active: bool | None = None) -> list[SellerBannedBuyer]:
-        q = self.db.query(SellerBannedBuyer)
+        ban = SellerBannedBuyer(
+            seller_id=seller_id,
+            buyer_id=buyer_id,
+            reason=reason,
+            active=active,
+        )
+        return await self.add(ban)
+
+    async def list_bans(
+        self,
+        seller_id: int | None = None,
+        active: bool | None = None,
+    ) -> list[SellerBannedBuyer]:
+        db = await self._get_db()
+        stmt = select(SellerBannedBuyer)
+
         if seller_id is not None:
-            q = q.filter(SellerBannedBuyer.seller_id == seller_id)
+            stmt = stmt.where(SellerBannedBuyer.seller_id == seller_id)
         if active is not None:
-            q = q.filter(SellerBannedBuyer.active == active)
-        return q.order_by(SellerBannedBuyer.created_at.desc()).all()
+            stmt = stmt.where(SellerBannedBuyer.active == active)
 
-    def create_log(self, **kwargs) -> AuditLog:
-        return self.add(AuditLog(**kwargs))
+        stmt = stmt.order_by(SellerBannedBuyer.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def create_log(self, **kwargs) -> AuditLog:
+        return await self.add(AuditLog(**kwargs))

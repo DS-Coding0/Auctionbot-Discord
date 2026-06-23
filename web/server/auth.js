@@ -8,9 +8,12 @@ router.get('/discord', passport.authenticate('discord'))
 
 router.get(
   '/discord/callback',
-  passport.authenticate('discord', { failureRedirect: '/auth/failed' }),
-  (req, res) => {
-    res.redirect(CLIENT_URL)
+  passport.authenticate('discord', { failureRedirect: '/api/auth/failed' }),
+  (req, res, next) => {
+    req.session.save((err) => {
+      if (err) return next(err)
+      res.redirect(`${CLIENT_URL}/dashboard`)
+    })
   }
 )
 

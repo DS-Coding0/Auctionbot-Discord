@@ -2,5 +2,22 @@ from db.repository import Repository
 
 
 class BanRepository(Repository):
-    def ban_buyer(self, seller_id: int, buyer_id: int, reason: str | None = None, active: bool = True):
-        return self.upsert_ban(seller_id=seller_id, buyer_id=buyer_id, reason=reason, active=active)
+    async def ban_buyer(
+        self,
+        seller_id: int,
+        buyer_id: int,
+        reason: str | None = None,
+        active: bool = True,
+    ):
+        return await self.upsert_ban(
+            seller_id=seller_id,
+            buyer_id=buyer_id,
+            reason=reason,
+            active=active,
+        )
+
+    async def is_buyer_banned(self, seller_id: int, buyer_id: int) -> bool:
+        return await super().is_buyer_banned(seller_id, buyer_id)
+
+    async def list_bans(self, seller_id: int | None = None, active: bool | None = None):
+        return await super().list_bans(seller_id=seller_id, active=active)

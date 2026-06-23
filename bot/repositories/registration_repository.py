@@ -2,8 +2,15 @@ from db.repository import Repository
 
 
 class RegistrationRepository(Repository):
-    def register_discord_user(self, discord_id: str, username: str, global_name: str | None = None, avatar: str | None = None, role: str = 'buyer'):
-        return self.get_or_create_user(
+    async def register_discord_user(
+        self,
+        discord_id: str,
+        username: str,
+        global_name: str | None = None,
+        avatar: str | None = None,
+        role: str = "buyer",
+    ):
+        return await self.get_or_create_user(
             discord_id=discord_id,
             username=username,
             global_name=global_name,

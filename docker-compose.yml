@@ -1,5 +1,5 @@
 services:
-  postgres:
+  auctionbot_postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
 
-  bot:
+  auctionbot_bot:
     build:
       context: .
       dockerfile: deploy/bot.Dockerfile
@@ -30,19 +30,54 @@ services:
     volumes:
       - ./output:/app/output
 
-  web:
+  auctionbot_web:
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: 3001
+      CLIENT_URL: ${APP_URL}
     ports:
-      - "3001:3001"
-      - "5173:5173"
+      - "701:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  auctionbot_frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VITE_API_BASE_URL: ${FRONTEND_URL}
+    ports:
+      - "702:80"
+    depends_on:
+      - web
+  
+  auctionbot_pgadmin:
+    image: dpage/pgadmin4:9.8
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@auctionbot.ds-coding.de
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'True'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  pgadmin_data:

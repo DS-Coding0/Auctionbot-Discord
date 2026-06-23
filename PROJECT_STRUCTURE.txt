@@ -1,128 +1,133 @@
-Auctiobot-Discord/
-├── .env
-├── .env.example
-├── docker-compose.yml
-├── requirements.txt
-├── main.py
-├── README.md
-├── PROJECT_STRUCTURE.txt
-│
-├── bot/
+Auctionbot-Discord
+├── bot
+│   ├── cogs
+│   │   ├── __init__.py
+│   │   ├── admin.py
+│   │   ├── auctions.py
+│   │   ├── item.py
+│   │   ├── orders.py
+│   │   ├── ratings.py
+│   │   ├── registration.py
+│   │   └── shows.py
+│   ├── repositories
+│   │   ├── auction_repository.py
+│   │   ├── audit_repository.py
+│   │   ├── ban_repository.py
+│   │   ├── item_repository.py
+│   │   ├── order_repository.py
+│   │   ├── rating_repository.py
+│   │   ├── registration_repository.py
+│   │   ├── show_repository.py
+│   │   └── user_repository.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── auction_service.py
+│   │   ├── audit_service.py
+│   │   ├── ban_service.py
+│   │   ├── item_service.py
+│   │   ├── order_service.py
+│   │   ├── rating_service.py
+│   │   ├── reminder_service.py
+│   │   └── show_service.py
+│   ├── tasks
+│   │   ├── __init__.py
+│   │   ├── auction_loops.py
+│   │   ├── recovery.py
+│   │   └── reminder_loops.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── checks.py
+│   │   ├── constants.py
+│   │   ├── embeds.py
+│   │   └── time.py
+│   ├── views
+│   │   ├── __init__.py
+│   │   ├── admin_view.py
+│   │   ├── auction_view.py
+│   │   └── show_view.py
 │   ├── __init__.py
 │   ├── client.py
 │   ├── config.py
 │   ├── intents.py
-│   │
-│   ├── cogs/
-│   │   ├── __init__.py
-│   │   ├── registration.py
-│   │   ├── shows.py
-│   │   ├── auctions.py
-│   │   ├── orders.py
-│   │   ├── ratings.py
-│   │   └── admin.py
-│   │
-│   ├── views/
-│   │   ├── __init__.py
-│   │   ├── auction_view.py
-│   │   ├── show_view.py
-│   │   └── admin_view.py
-│   │
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── auction_service.py
-│   │   ├── show_service.py
-│   │   ├── order_service.py
-│   │   ├── rating_service.py
-│   │   ├── audit_service.py
-│   │   └── reminder_service.py
-│   │
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── embeds.py
-│   │   ├── checks.py
-│   │   ├── time.py
-│   │   └── constants.py
-│   │
-│   └── tasks/
-│       ├── __init__.py
-│       ├── auction_loops.py
-│       ├── reminder_loops.py
-│       └── recovery.py
-│
-├── db/
+│   └── run.py
+├── db
+│   ├── migrations
+│   │   ├── versions
+│   │   │   └── .gitkeep
+│   │   └── .gitkeep
+│   ├── seed
+│   │   └── .gitkeep
 │   ├── __init__.py
 │   ├── models.py
-│   ├── schema.sql
-│   ├── session.py
 │   ├── repository.py
-│   ├── migrations/
-│   │   ├── .gitkeep
-│   │   └── versions/
-│   │       └── .gitkeep
-│   └── seed/
-│       └── .gitkeep
-│
-├── web/
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── index.html
-│   ├── .env.example
-│   │
-│   ├── server/
-│   │   ├── index.js
+│   ├── schema.sql
+│   └── session.py
+├── deploy
+│   ├── bot.Dockerfile
+│   ├── frontend.Dockerfile
+│   ├── nginx.conf
+│   └── web.Dockerfile
+├── docs
+│   ├── api.md
+│   ├── architecture.md
+│   ├── deployment.md
+│   └── pflichtenheft.md
+├── scripts
+│   ├── backup.sh
+│   ├── init.sql
+│   └── restore.sh
+├── web
+│   ├── server
+│   │   ├── middleware
+│   │   │   ├── requireAuth.js
+│   │   │   └── requireSeller.js
+│   │   ├── routes
+│   │   │   ├── auctions.js
+│   │   │   ├── bans.js
+│   │   │   ├── items.js
+│   │   │   ├── logs.js
+│   │   │   ├── me.js
+│   │   │   ├── orders.js
+│   │   │   ├── ratings.js
+│   │   │   └── shows.js
 │   │   ├── auth.js
 │   │   ├── db.js
-│   │   ├── routes/
-│   │   │   ├── me.js
-│   │   │   ├── ratings.js
+│   │   └── index.js
+│   ├── src
+│   │   ├── api
 │   │   │   ├── bans.js
-│   │   │   ├── shows.js
+│   │   │   ├── client.js
 │   │   │   ├── items.js
-│   │   │   ├── auctions.js
-|   |   |   ├── orders.js
-│   │   │   └── logs.js
-│   │   └── middleware/
-│   │       ├── requireAuth.js
-│   │       └── requireSeller.js
-│   │
-│   └── src/
-│       ├── main.jsx
-│       ├── App.jsx
-│       ├── api/
-│       │   ├── client.js
-│       │   ├── shows.js
-│       │   └── items.js
-│       ├── components/
-│       │   ├── Layout.jsx
-│       │   ├── Sidebar.jsx
-│       │   ├── DashboardCard.jsx
-│       │   ├── ShowForm.jsx
-│       │   ├── ItemForm.jsx
-│       │   ├── ItemTable.jsx
-│       │   └── LoginButton.jsx
-│       ├── pages/
-│       │   ├── Dashboard.jsx
-│       │   ├── Shows.jsx
-│       │   ├── Items.jsx
-│       │   ├── Auctions.jsx
-│       │   ├── Orders.ejs
-│       │   └── Login.jsx
-│       └── styles/
-│           └── app.css
-│
-├── deploy/
-│   ├── bot.Dockerfile
-│   ├── web.Dockerfile
-│   └── nginx.conf
-│
-├── scripts/
-│   ├── init.sql
-│   ├── backup.sh
-│   └── restore.sh
-│
-└── docs/
-    ├── pflichtenheft.md
-    ├── architecture.md
-    ├── deployment.md
-    └── api.md
+│   │   │   ├── ratings.js
+│   │   │   └── shows.js
+│   │   ├── components
+│   │   │   ├── DashboardCard.jsx
+│   │   │   ├── ItemForm.jsx
+│   │   │   ├── ItemTable.jsx
+│   │   │   ├── Layout.jsx
+│   │   │   ├── LoginButton.jsx
+│   │   │   ├── ShowForm.jsx
+│   │   │   └── Sidebar.jsx
+│   │   ├── pages
+│   │   │   ├── Auctions.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Items.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Orders.jsx
+│   │   │   └── Shows.jsx
+│   │   ├── styles
+│   │   │   └── app.css
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── .env.example
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── .env
+├── .env.example
+├── .gitignore
+├── create_structure.py
+├── docker-compose.yml
+├── main.py
+├── README.md
+└── requirements.txt

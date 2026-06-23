@@ -4,11 +4,11 @@ export default function LoginButton() {
   const navigate = useNavigate()
 
   const handleLogin = () => {
-    window.location.href = '/auth/discord'
+    window.location.href = '/api/auth/discord'
   }
 
   const handleLogout = async () => {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
     navigate('/login')
     window.location.reload()
   }

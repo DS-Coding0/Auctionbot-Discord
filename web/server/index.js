@@ -24,6 +24,8 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
+app.set('trust proxy', 1)
+
 app.use(cors({ origin: CLIENT_URL, credentials: true }))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -34,7 +36,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false
+    secure: true
   }
 }))
 
@@ -68,7 +70,7 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, service: 'web-server' })
 })
 
-app.use('/auth', authRouter)
+app.use('/api/auth', authRouter)
 
 app.use('/api/me', meRouter)
 app.use('/api/shows', requireAuth, showsRouter)
