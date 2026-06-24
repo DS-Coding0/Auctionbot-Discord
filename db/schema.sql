@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   discord_id VARCHAR(64) UNIQUE NOT NULL,
   username VARCHAR(255) NOT NULL,
   global_name VARCHAR(255),
-  avatar VARCHAR(255),
+  avatar VARCHAR(1024),
   role VARCHAR(32) NOT NULL DEFAULT 'buyer',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS shows (
   status VARCHAR(32) NOT NULL DEFAULT 'draft',
   starts_at TIMESTAMPTZ,
   ends_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -36,7 +37,16 @@ CREATE TABLE IF NOT EXISTS items (
   instant_buy_price NUMERIC(10,2),
   min_increment NUMERIC(10,2) NOT NULL DEFAULT 1,
   status VARCHAR(32) NOT NULL DEFAULT 'draft',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT items_start_price_nonnegative CHECK (start_price >= 0),
+  CONSTRAINT items_instant_buy_price_nonnegative CHECK (
+    instant_buy_price IS NULL OR instant_buy_price >= 0
+  ),
+  CONSTRAINT items_min_increment_positive CHECK (min_increment > 0),
+  CONSTRAINT items_instant_buy_ge_start CHECK (
+    instant_buy_price IS NULL OR instant_buy_price >= start_price
+  )
 );
 
 CREATE TABLE IF NOT EXISTS auctions (
@@ -46,9 +56,22 @@ CREATE TABLE IF NOT EXISTS auctions (
   channel_id VARCHAR(64),
   message_id VARCHAR(64),
   current_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  highest_bidder_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'scheduled',
   ends_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT auctions_item_unique UNIQUE (item_id),
+  CONSTRAINT auctions_current_price_nonnegative CHECK (current_price >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS bids (
+  id BIGSERIAL PRIMARY KEY,
+  auction_id BIGINT NOT NULL REFERENCES auctions(id) ON DELETE CASCADE,
+  buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount NUMERIC(10,2) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT bids_amount_positive CHECK (amount > 0)
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -60,7 +83,10 @@ CREATE TABLE IF NOT EXISTS orders (
   quantity INTEGER NOT NULL DEFAULT 1,
   total_price NUMERIC(10,2) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'pending',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT orders_quantity_positive CHECK (quantity > 0),
+  CONSTRAINT orders_total_price_nonnegative CHECK (total_price >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS ratings (
@@ -94,3 +120,82 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   message TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_discord_id
+  ON users(discord_id);
+
+CREATE INDEX IF NOT EXISTS idx_shows_server_id
+  ON shows(server_id);
+
+CREATE INDEX IF NOT EXISTS idx_shows_seller_id
+  ON shows(seller_id);
+
+CREATE INDEX IF NOT EXISTS idx_shows_status
+  ON shows(status);
+
+CREATE INDEX IF NOT EXISTS idx_items_show_id
+  ON items(show_id);
+
+CREATE INDEX IF NOT EXISTS idx_items_status
+  ON items(status);
+
+CREATE INDEX IF NOT EXISTS idx_auctions_show_id
+  ON auctions(show_id);
+
+CREATE INDEX IF NOT EXISTS idx_auctions_status
+  ON auctions(status);
+
+CREATE INDEX IF NOT EXISTS idx_auctions_ends_at
+  ON auctions(ends_at);
+
+CREATE INDEX IF NOT EXISTS idx_auctions_highest_bidder_id
+  ON auctions(highest_bidder_id);
+
+CREATE INDEX IF NOT EXISTS idx_bids_auction_id
+  ON bids(auction_id);
+
+CREATE INDEX IF NOT EXISTS idx_bids_buyer_id
+  ON bids(buyer_id);
+
+CREATE INDEX IF NOT EXISTS idx_bids_auction_amount_created
+  ON bids(auction_id, amount DESC, created_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_orders_buyer_id
+  ON orders(buyer_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_seller_id
+  ON orders(seller_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_item_id
+  ON orders(item_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_auction_id
+  ON orders(auction_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_status
+  ON orders(status);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_one_per_auction
+  ON orders(auction_id)
+  WHERE auction_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ratings_target_user_id
+  ON ratings(target_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_ratings_rater_id
+  ON ratings(rater_id);
+
+CREATE INDEX IF NOT EXISTS idx_ratings_order_id
+  ON ratings(order_id);
+
+CREATE INDEX IF NOT EXISTS idx_seller_banned_buyers_seller_active
+  ON seller_banned_buyers(seller_id, active);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_type
+  ON audit_logs(type);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity
+  ON audit_logs(entity_type, entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at
+  ON audit_logs(created_at);

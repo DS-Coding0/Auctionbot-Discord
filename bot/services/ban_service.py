@@ -22,8 +22,15 @@ class BanService:
             active=active,
         )
 
-    async def list_bans(self, seller_id: int | None = None, active: bool | None = None):
-        return await self.repo.list_bans(seller_id=seller_id, active=active)
+    async def list_bans(
+        self,
+        seller_id: int | None = None,
+        active: bool | None = None,
+    ):
+        return await self.repo.list_bans(
+            seller_id=seller_id,
+            active=active,
+        )
 
     async def close(self):
         await self.repo.close()

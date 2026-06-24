@@ -6,9 +6,8 @@ from bot.services.item_service import ItemService
 
 
 class ItemsCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.service = ItemService()
 
     @app_commands.command(name="items", description="List items in a show")
     @app_commands.describe(show_id="Show ID")
@@ -17,18 +16,22 @@ class ItemsCog(commands.Cog):
         interaction: discord.Interaction,
         show_id: int | None = None,
     ):
-        items = self.service.list_items(show_id=show_id)
-        if not items:
-            return await interaction.response.send_message(
-                "No items found.",
-                ephemeral=True,
-            )
+        service = ItemService()
+        try:
+            await interaction.response.defer(ephemeral=True)
+            items = await service.list_items(show_id=show_id)
 
-        lines = [
-            f"#{item.id} | {item.title} | {item.status} | start={item.start_price}"
-            for item in items[:10]
-        ]
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+            if not items:
+                await interaction.followup.send("No items found.")
+                return
+
+            lines = [
+                f"#{item.id} | {item.title} | {item.status} | start={item.start_price}"
+                for item in items[:10]
+            ]
+            await interaction.followup.send("\n".join(lines))
+        finally:
+            await service.close()
 
     @app_commands.command(name="create_item", description="Create an item in a show")
     @app_commands.describe(
@@ -53,22 +56,25 @@ class ItemsCog(commands.Cog):
         min_increment: float = 1.0,
         status: str = "draft",
     ):
-        item = self.service.create_item(
-            show_id=show_id,
-            title=title,
-            description=description,
-            image_url=image_url,
-            start_price=start_price,
-            instant_buy_price=instant_buy_price,
-            min_increment=min_increment,
-            status=status,
-        )
+        service = ItemService()
+        try:
+            await interaction.response.defer(ephemeral=True)
 
-        await interaction.response.send_message(
-            f"Created item #{item.id}: {item.title}",
-            ephemeral=True,
-        )
+            item = await service.create_item(
+                show_id=show_id,
+                title=title,
+                description=description,
+                image_url=image_url,
+                start_price=start_price,
+                instant_buy_price=instant_buy_price,
+                min_increment=min_increment,
+                status=status,
+            )
+
+            await interaction.followup.send(f"Created item #{item.id}: {item.title}")
+        finally:
+            await service.close()
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(ItemsCog(bot))

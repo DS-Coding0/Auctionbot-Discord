@@ -1,5 +1,5 @@
 services:
-  auctionbot_postgres:
+  postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
 
-  auctionbot_bot:
+  bot:
     build:
       context: .
       dockerfile: deploy/bot.Dockerfile
@@ -30,7 +30,7 @@ services:
     volumes:
       - ./output:/app/output
 
-  auctionbot_web:
+  web:
     build:
       context: .
       dockerfile: deploy/web.Dockerfile
@@ -47,7 +47,7 @@ services:
       postgres:
         condition: service_healthy
 
-  auctionbot_frontend:
+  frontend:
     build:
       context: .
       dockerfile: deploy/frontend.Dockerfile
@@ -61,7 +61,7 @@ services:
     depends_on:
       - web
   
-  auctionbot_pgadmin:
+  pgadmin:
     image: dpage/pgadmin4:9.8
     restart: unless-stopped
     env_file:

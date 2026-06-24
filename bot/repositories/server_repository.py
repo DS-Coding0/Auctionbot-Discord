@@ -1,5 +1,5 @@
 from db.repository import Repository
 
 
-class RatingRepository(Repository):
+class ServerRepository(Repository):
     pass

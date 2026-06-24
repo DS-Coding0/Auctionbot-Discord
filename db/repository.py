@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import (
-    AuditLog,
     Auction,
+    AuditLog,
     Item,
     Order,
     Rating,
@@ -14,22 +16,23 @@ from .models import (
     Show,
     User,
 )
-from .session import SessionLocal
+from .session import AsyncSessionLocal
 
 
 class Repository:
     def __init__(self, db: AsyncSession | None = None):
         self.db = db
-        self._own_session = db is None
+        self._owns_session = db is None
 
     async def _get_db(self) -> AsyncSession:
         if self.db is None:
-            self.db = SessionLocal()
+            self.db = AsyncSessionLocal()
         return self.db
 
     async def close(self):
-        if self.db is not None and self._own_session:
+        if self.db is not None and self._owns_session:
             await self.db.close()
+            self.db = None
 
     async def commit(self):
         db = await self._get_db()
@@ -57,23 +60,20 @@ class Repository:
         return await db.get(Server, server_id)
 
     async def get_or_create_server(self, server_id: int, name: str) -> Server:
-        db = await self._get_db()
         server = await self.get_server(server_id)
         if server:
             if name and server.name != name:
                 server.name = name
-                await db.commit()
-                await db.refresh(server)
+                await self.commit()
+                await self.refresh(server)
             return server
 
-        server = Server(id=server_id, name=name)
-        return await self.add(server)
+        return await self.add(Server(id=server_id, name=name))
 
     async def get_user_by_discord_id(self, discord_id: str) -> User | None:
         db = await self._get_db()
-        result = await db.execute(
-            select(User).where(User.discord_id == discord_id)
-        )
+        stmt = select(User).where(User.discord_id == discord_id)
+        result = await db.execute(stmt)
         return result.scalars().first()
 
     async def get_user(self, user_id: int) -> User | None:
@@ -88,26 +88,25 @@ class Repository:
         avatar: str | None = None,
         role: str = "buyer",
     ) -> User:
-        db = await self._get_db()
         user = await self.get_user_by_discord_id(discord_id)
-
         if user:
             user.username = username or user.username
             user.global_name = global_name
             user.avatar = avatar
             user.role = role or user.role
-            await db.commit()
-            await db.refresh(user)
+            await self.commit()
+            await self.refresh(user)
             return user
 
-        user = User(
-            discord_id=discord_id,
-            username=username,
-            global_name=global_name,
-            avatar=avatar,
-            role=role,
+        return await self.add(
+            User(
+                discord_id=discord_id,
+                username=username,
+                global_name=global_name,
+                avatar=avatar,
+                role=role,
+            )
         )
-        return await self.add(user)
 
     async def list_shows(
         self,
@@ -137,7 +136,6 @@ class Repository:
         return await self.add(Show(**kwargs))
 
     async def update_show(self, show_id: int, **kwargs) -> Show | None:
-        db = await self._get_db()
         show = await self.get_show(show_id)
         if not show:
             return None
@@ -146,8 +144,8 @@ class Repository:
             if hasattr(show, key):
                 setattr(show, key, value)
 
-        await db.commit()
-        await db.refresh(show)
+        await self.commit()
+        await self.refresh(show)
         return show
 
     async def delete_show(self, show_id: int) -> bool:
@@ -183,7 +181,6 @@ class Repository:
         return await self.add(Item(**kwargs))
 
     async def update_item(self, item_id: int, **kwargs) -> Item | None:
-        db = await self._get_db()
         item = await self.get_item(item_id)
         if not item:
             return None
@@ -192,8 +189,8 @@ class Repository:
             if hasattr(item, key):
                 setattr(item, key, value)
 
-        await db.commit()
-        await db.refresh(item)
+        await self.commit()
+        await self.refresh(item)
         return item
 
     async def delete_item(self, item_id: int) -> bool:
@@ -229,7 +226,6 @@ class Repository:
         return await self.add(Auction(**kwargs))
 
     async def update_auction(self, auction_id: int, **kwargs) -> Auction | None:
-        db = await self._get_db()
         auction = await self.get_auction(auction_id)
         if not auction:
             return None
@@ -238,8 +234,8 @@ class Repository:
             if hasattr(auction, key):
                 setattr(auction, key, value)
 
-        await db.commit()
-        await db.refresh(auction)
+        await self.commit()
+        await self.refresh(auction)
         return auction
 
     async def delete_auction(self, auction_id: int) -> bool:
@@ -278,7 +274,6 @@ class Repository:
         return await self.add(Order(**kwargs))
 
     async def update_order(self, order_id: int, **kwargs) -> Order | None:
-        db = await self._get_db()
         order = await self.get_order(order_id)
         if not order:
             return None
@@ -287,8 +282,8 @@ class Repository:
             if hasattr(order, key):
                 setattr(order, key, value)
 
-        await db.commit()
-        await db.refresh(order)
+        await self.commit()
+        await self.refresh(order)
         return order
 
     async def delete_order(self, order_id: int) -> bool:
@@ -324,25 +319,22 @@ class Repository:
 
     async def get_ban(self, seller_id: int, buyer_id: int) -> SellerBannedBuyer | None:
         db = await self._get_db()
-        result = await db.execute(
-            select(SellerBannedBuyer).where(
-                SellerBannedBuyer.seller_id == seller_id,
-                SellerBannedBuyer.buyer_id == buyer_id,
-            )
+        stmt = select(SellerBannedBuyer).where(
+            SellerBannedBuyer.seller_id == seller_id,
+            SellerBannedBuyer.buyer_id == buyer_id,
         )
+        result = await db.execute(stmt)
         return result.scalars().first()
 
     async def is_buyer_banned(self, seller_id: int, buyer_id: int) -> bool:
         db = await self._get_db()
-        result = await db.execute(
-            select(SellerBannedBuyer).where(
-                SellerBannedBuyer.seller_id == seller_id,
-                SellerBannedBuyer.buyer_id == buyer_id,
-                SellerBannedBuyer.active.is_(True),
-            )
+        stmt = select(SellerBannedBuyer).where(
+            SellerBannedBuyer.seller_id == seller_id,
+            SellerBannedBuyer.buyer_id == buyer_id,
+            SellerBannedBuyer.active.is_(True),
         )
-        ban = result.scalars().first()
-        return ban is not None
+        result = await db.execute(stmt)
+        return result.scalars().first() is not None
 
     async def upsert_ban(
         self,
@@ -351,23 +343,22 @@ class Repository:
         reason: str | None = None,
         active: bool = True,
     ) -> SellerBannedBuyer:
-        db = await self._get_db()
         ban = await self.get_ban(seller_id, buyer_id)
-
         if ban:
             ban.reason = reason
             ban.active = active
-            await db.commit()
-            await db.refresh(ban)
+            await self.commit()
+            await self.refresh(ban)
             return ban
 
-        ban = SellerBannedBuyer(
-            seller_id=seller_id,
-            buyer_id=buyer_id,
-            reason=reason,
-            active=active,
+        return await self.add(
+            SellerBannedBuyer(
+                seller_id=seller_id,
+                buyer_id=buyer_id,
+                reason=reason,
+                active=active,
+            )
         )
-        return await self.add(ban)
 
     async def list_bans(
         self,

@@ -18,7 +18,7 @@ class BotClient(commands.Bot):
 
     async def setup_hook(self):
         await self.load_extension("bot.cogs.auctions")
-        await self.load_extension("bot.cogs.item")
+        await self.load_extension("bot.cogs.items")
         await self.load_extension("bot.cogs.admin")
         await self.load_extension("bot.cogs.orders")
         await self.load_extension("bot.cogs.ratings")
