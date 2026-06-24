@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS shows (
   status VARCHAR(32) NOT NULL DEFAULT 'draft',
   starts_at TIMESTAMPTZ,
   ends_at TIMESTAMPTZ,
+  voice_channel_id BIGINT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS auctions (
   highest_bidder_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'scheduled',
   ends_at TIMESTAMPTZ,
+  highest_bidder_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  reset_seconds INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT auctions_item_unique UNIQUE (item_id),

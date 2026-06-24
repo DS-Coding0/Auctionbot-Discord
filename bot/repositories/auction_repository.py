@@ -24,6 +24,7 @@ class AuctionRepository(Repository):
         price: float,
         status: str | None = None,
         highest_bidder_id: int | None = None,
+        ends_at=None,
     ) -> Auction | None:
         data = {
             "current_price": price,
@@ -34,6 +35,9 @@ class AuctionRepository(Repository):
 
         if highest_bidder_id is not None:
             data["highest_bidder_id"] = highest_bidder_id
+
+        if ends_at is not None:
+            data["ends_at"] = ends_at
 
         return await self.update_auction(auction_id, **data)
 
@@ -49,6 +53,26 @@ class AuctionRepository(Repository):
                 buyer_id=buyer_id,
                 amount=amount,
             )
+        )
+
+    async def place_bid(
+        self,
+        auction_id: int,
+        buyer_id: int,
+        amount: float,
+        ends_at=None,
+    ) -> Auction | None:
+        await self.create_bid(
+            auction_id=auction_id,
+            buyer_id=buyer_id,
+            amount=amount,
+        )
+
+        return await self.update_price(
+            auction_id=auction_id,
+            price=amount,
+            highest_bidder_id=buyer_id,
+            ends_at=ends_at,
         )
 
     async def list_bids(self, auction_id: int) -> list[Bid]:

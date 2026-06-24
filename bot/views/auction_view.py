@@ -1,14 +1,44 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import discord
 from discord import ui
+from discord.ext import tasks
 
 from bot.config import config
 from bot.services.auction_service import AuctionService
 from bot.services.user_service import UserService
+
+
+def _now_berlin() -> datetime:
+    return datetime.now(ZoneInfo("Europe/Berlin"))
+
+
+def _to_berlin(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Europe/Berlin"))
+    return dt.astimezone(ZoneInfo("Europe/Berlin"))
+
+
+def _format_remaining(ends_at: datetime | None) -> str:
+    if ends_at is None:
+        return "—"
+
+    end_local = _to_berlin(ends_at)
+    now_local = _now_berlin()
+    remaining = end_local - now_local
+    total_seconds = max(0, int(remaining.total_seconds()))
+
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 class BidModal(ui.Modal, title="Place bid"):
@@ -78,8 +108,51 @@ class StartAuctionModal(ui.Modal, title="Start auction by item name"):
         required=True,
     )
 
+    duration_seconds = ui.TextInput(
+        label="Duration in seconds",
+        placeholder="e.g. 60",
+        required=True,
+    )
+
+    reset_seconds = ui.TextInput(
+        label="Reset seconds",
+        placeholder="e.g. 10",
+        required=True,
+    )
+
     async def on_submit(self, interaction: discord.Interaction):
         needle = self.item_name.value.strip().lower()
+
+        try:
+            duration_seconds = int(self.duration_seconds.value)
+            reset_seconds = int(self.reset_seconds.value)
+        except ValueError:
+            await interaction.response.send_message(
+                "Duration and reset seconds must be integers.",
+                ephemeral=True,
+            )
+            return
+
+        if duration_seconds <= 0:
+            await interaction.response.send_message(
+                "duration_seconds must be > 0",
+                ephemeral=True,
+            )
+            return
+
+        if reset_seconds <= 0:
+            await interaction.response.send_message(
+                "reset_seconds must be > 0",
+                ephemeral=True,
+            )
+            return
+
+        if reset_seconds > duration_seconds:
+            await interaction.response.send_message(
+                "reset_seconds cannot be greater than duration_seconds.",
+                ephemeral=True,
+            )
+            return
 
         service = AuctionService()
         try:
@@ -98,7 +171,11 @@ class StartAuctionModal(ui.Modal, title="Start auction by item name"):
                 )
                 return
 
-            view = AuctionSearchResultsView(matches)
+            view = AuctionSearchResultsView(
+                matches=matches,
+                duration_seconds=duration_seconds,
+                reset_seconds=reset_seconds,
+            )
             await interaction.response.send_message(
                 "Select an auction to start:",
                 view=view,
@@ -109,9 +186,17 @@ class StartAuctionModal(ui.Modal, title="Start auction by item name"):
 
 
 class AuctionSearchResultsView(ui.View):
-    def __init__(self, matches: list[tuple[object, object]], timeout: float | None = 120):
+    def __init__(
+        self,
+        matches: list[tuple[object, object]],
+        duration_seconds: int,
+        reset_seconds: int,
+        timeout: float | None = 120,
+    ):
         super().__init__(timeout=timeout)
         self.matches = matches[:25]
+        self.duration_seconds = duration_seconds
+        self.reset_seconds = reset_seconds
 
         if not self.matches:
             return
@@ -152,7 +237,11 @@ class AuctionSearchResultsView(ui.View):
 
         service = AuctionService()
         try:
-            started, item, show, error = await service.start_auction(selected.id)
+            started, item, show, error = await service.start_auction(
+                auction_id=selected.id,
+                duration_seconds=self.duration_seconds,
+                reset_seconds=self.reset_seconds,
+            )
             if error:
                 await interaction.response.send_message(error, ephemeral=True)
                 return
@@ -160,6 +249,7 @@ class AuctionSearchResultsView(ui.View):
             seller_id = getattr(show, "seller_id", None) if show else None
 
             view = AuctionLiveView(
+                service=service,
                 auction_id=started.id,
                 seller_id=seller_id,
             )
@@ -172,26 +262,33 @@ class AuctionSearchResultsView(ui.View):
 
             try:
                 view.message = await interaction.original_response()
+                view.start_countdown()
             except Exception:
                 view.message = None
+
+            service = None
         finally:
-            await service.close()
+            if service is not None:
+                await service.close()
 
 
 class AuctionLiveView(ui.View):
     def __init__(
         self,
+        service: AuctionService,
         auction_id: int,
         seller_id: int | None,
         timeout: float | None = None,
     ):
         super().__init__(timeout=timeout)
+        self.service = service
         self.auction_id = auction_id
         self.seller_id = seller_id
         self.message: discord.Message | None = None
         self.last_item = None
         self.last_auction = None
         self.last_show = None
+        self._countdown_started = False
 
     def build_embed(self, auction, item=None, show=None):
         embed = discord.Embed(
@@ -229,13 +326,33 @@ class AuctionLiveView(ui.View):
                 )
 
         ends_at = getattr(auction, "ends_at", None) or getattr(show, "ends_at", None)
+        reset_seconds = int(getattr(auction, "reset_seconds", 0) or 0)
+
         if ends_at:
-            if isinstance(ends_at, datetime) and ends_at.tzinfo is None:
-                ends_at = ends_at.replace(tzinfo=ZoneInfo("Europe/Berlin"))
-            remaining = ends_at - datetime.now(ZoneInfo("Europe/Berlin"))
+            end_local = _to_berlin(ends_at)
+            embed.add_field(
+                name="Ends At",
+                value=end_local.strftime("%d.%m.%Y %H:%M:%S %Z"),
+                inline=False,
+            )
             embed.add_field(
                 name="Remaining",
-                value=str(remaining).split(".")[0],
+                value=_format_remaining(ends_at),
+                inline=True,
+            )
+
+        if reset_seconds > 0:
+            embed.add_field(
+                name="Reset Window",
+                value=f"{reset_seconds} seconds",
+                inline=True,
+            )
+
+        highest_bidder_id = getattr(auction, "highest_bidder_id", None)
+        if highest_bidder_id is not None:
+            embed.add_field(
+                name="Highest Bidder",
+                value=str(highest_bidder_id),
                 inline=True,
             )
 
@@ -249,30 +366,96 @@ class AuctionLiveView(ui.View):
 
         return embed
 
+    def _disable_buttons(self):
+        for child in self.children:
+            if isinstance(child, ui.Button):
+                child.disabled = True
+
     async def refresh(self):
-        service = AuctionService()
         try:
-            auction, item = await service.repo.get_auction_with_item(self.auction_id)
+            auction, item = await self.service.repo.get_auction_with_item(self.auction_id)
             if not auction:
                 return
 
-            show = await service.repo.get_show(auction.show_id)
+            show = await self.service.repo.get_show(auction.show_id)
 
             self.last_auction = auction
             self.last_item = item
             self.last_show = show
 
+            if getattr(auction, "status", None) != "live":
+                self._disable_buttons()
+
             embed = self.build_embed(auction, item, show)
             if self.message:
                 await self.message.edit(embed=embed, view=self)
-        finally:
-            await service.close()
+        except discord.HTTPException:
+            return
+
+    def start_countdown(self):
+        if not self._countdown_started:
+            self._countdown_started = True
+            self.countdown_loop.start()
+
+    def stop_countdown(self):
+        if self.countdown_loop.is_running():
+            self.countdown_loop.cancel()
+        self._countdown_started = False
+
+    @tasks.loop(seconds=2.0)
+    async def countdown_loop(self):
+        if not self.message:
+            return
+
+        try:
+            auction, item = await self.service.repo.get_auction_with_item(self.auction_id)
+            if not auction:
+                self.stop_countdown()
+                return
+
+            show = await self.service.repo.get_show(auction.show_id)
+
+            self.last_auction = auction
+            self.last_item = item
+            self.last_show = show
+
+            if getattr(auction, "status", None) != "live":
+                self._disable_buttons()
+                embed = self.build_embed(auction, item, show)
+                await self.message.edit(embed=embed, view=self)
+                self.stop_countdown()
+                return
+
+            ends_at = getattr(auction, "ends_at", None) or getattr(show, "ends_at", None)
+            if ends_at is not None:
+                end_local = _to_berlin(ends_at)
+                if end_local <= _now_berlin():
+                    ended = await self.service.end_auction(self.auction_id)
+                    self.last_auction = ended
+                    self._disable_buttons()
+                    embed = self.build_embed(ended, item, show)
+                    await self.message.edit(embed=embed, view=self)
+                    self.stop_countdown()
+                    return
+
+            embed = self.build_embed(auction, item, show)
+            await self.message.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            self.stop_countdown()
+
+    async def on_timeout(self):
+        self._disable_buttons()
+        self.stop_countdown()
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        service = AuctionService()
         users = UserService()
         try:
-            auction = await service.get_auction(self.auction_id)
+            auction = await self.service.get_auction(self.auction_id)
             if not auction or getattr(auction, "status", None) != "live":
                 await interaction.response.send_message(
                     "This auction is not live.",
@@ -294,7 +477,6 @@ class AuctionLiveView(ui.View):
 
             return True
         finally:
-            await service.close()
             await users.close()
 
     @ui.button(label="Bid", style=discord.ButtonStyle.primary)
@@ -308,7 +490,6 @@ class AuctionLiveView(ui.View):
 
     @ui.button(label="Instant Buy", style=discord.ButtonStyle.success)
     async def instant_buy_button(self, interaction: discord.Interaction, button: ui.Button):
-        service = AuctionService()
         users = UserService()
         try:
             if not config.instant_buy_enabled:
@@ -323,7 +504,7 @@ class AuctionLiveView(ui.View):
                 role="buyer",
             )
 
-            result, error = await service.instant_buy(
+            result, error = await self.service.instant_buy(
                 self.auction_id,
                 buyer_db_user.id,
             )
@@ -339,7 +520,6 @@ class AuctionLiveView(ui.View):
                 ephemeral=True,
             )
         finally:
-            await service.close()
             await users.close()
 
 

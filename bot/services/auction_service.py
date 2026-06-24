@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from bot.config import config
 from bot.repositories.auction_repository import AuctionRepository
 from bot.utils.time import utcnow
@@ -19,6 +21,7 @@ class AuctionService:
         channel_id: str | None = None,
         message_id: str | None = None,
         ends_at=None,
+        reset_seconds: int = 0,
     ):
         return await self.repo.create_auction(
             show_id=show_id,
@@ -28,6 +31,7 @@ class AuctionService:
             channel_id=channel_id,
             message_id=message_id,
             ends_at=ends_at,
+            reset_seconds=reset_seconds,
         )
 
     async def get_auction(self, auction_id: int):
@@ -41,23 +45,40 @@ class AuctionService:
         show = await self.repo.get_show(auction.show_id)
         return auction, item, show, None
 
-    async def start_auction(self, auction_id: int):
+    async def start_auction(
+        self,
+        auction_id: int,
+        duration_seconds: int,
+        reset_seconds: int,
+    ):
         auction, item, show, error = await self.get_auction_context(auction_id)
         if error:
             return None, None, None, error
 
+        if duration_seconds <= 0:
+            return None, None, None, "duration_seconds must be greater than 0"
+
+        if reset_seconds <= 0:
+            return None, None, None, "reset_seconds must be greater than 0"
+
+        if reset_seconds > duration_seconds:
+            return None, None, None, "reset_seconds cannot be greater than duration_seconds"
+
         if getattr(auction, "status", None) == "live":
             return auction, item, show, None
 
-        update_data = {"status": "live"}
+        now = utcnow()
+
+        update_data = {
+            "status": "live",
+            "ends_at": now + timedelta(seconds=duration_seconds),
+            "reset_seconds": reset_seconds,
+        }
 
         if item is not None:
             start_price = getattr(item, "start_price", None)
             if start_price is not None and float(getattr(auction, "current_price", 0) or 0) <= 0:
                 update_data["current_price"] = float(start_price)
-
-        if getattr(auction, "ends_at", None) is None and getattr(show, "ends_at", None) is not None:
-            update_data["ends_at"] = getattr(show, "ends_at")
 
         updated = await self.repo.update_auction(auction_id, **update_data)
         return updated, item, show, None
@@ -83,6 +104,11 @@ class AuctionService:
         if auction.status != "live":
             return None, "Auction is not live"
 
+        now = utcnow()
+        if auction.ends_at and auction.ends_at <= now:
+            await self.end_auction(auction_id)
+            return None, "Auction already ended"
+
         item = await self.repo.get_item(auction.item_id)
         show = await self.repo.get_show(auction.show_id)
 
@@ -99,10 +125,19 @@ class AuctionService:
         if amount < required:
             return None, f"Minimum bid is {required}"
 
+        reset_seconds = int(getattr(auction, "reset_seconds", 0) or 0)
+        new_ends_at = None
+
+        if auction.ends_at and reset_seconds > 0:
+            remaining = (auction.ends_at - now).total_seconds()
+            if remaining < reset_seconds:
+                new_ends_at = now + timedelta(seconds=reset_seconds)
+
         updated = await self.repo.place_bid(
             auction_id=auction_id,
             buyer_id=buyer_id,
             amount=amount,
+            ends_at=new_ends_at,
         )
         return updated, None
 

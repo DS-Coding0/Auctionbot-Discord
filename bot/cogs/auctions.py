@@ -70,17 +70,44 @@ class AuctionsCog(commands.Cog):
         finally:
             await service.close()
 
-    @app_commands.command(
-        name="start_auction",
-        description="Start an auction by ID and post live buttons",
+    @app_commands.command(name="start_auction", description="Start an auction")
+    @app_commands.describe(
+        auction_id="Auction ID",
+        duration_seconds="Initial runtime in seconds",
+        reset_seconds="Reset-to time in final seconds",
     )
-    @app_commands.describe(auction_id="Auction ID")
-    async def start_auction(self, interaction: discord.Interaction, auction_id: int):
+    async def start_auction(
+        self,
+        interaction: discord.Interaction,
+        auction_id: int,
+        duration_seconds: int,
+        reset_seconds: int,
+    ):
         service = AuctionService()
         try:
             await interaction.response.defer()
 
-            auction, item, show, error = await service.start_auction(auction_id)
+            if duration_seconds <= 0:
+                await interaction.followup.send("duration_seconds must be > 0", ephemeral=True)
+                return
+
+            if reset_seconds <= 0:
+                await interaction.followup.send("reset_seconds must be > 0", ephemeral=True)
+                return
+
+            if reset_seconds > duration_seconds:
+                await interaction.followup.send(
+                    "reset_seconds cannot be greater than duration_seconds.",
+                    ephemeral=True,
+                )
+                return
+
+            auction, item, show, error = await service.start_auction(
+                auction_id=auction_id,
+                duration_seconds=duration_seconds,
+                reset_seconds=reset_seconds,
+            )
+
             if error:
                 await interaction.followup.send(error, ephemeral=True)
                 return
@@ -88,6 +115,7 @@ class AuctionsCog(commands.Cog):
             seller_id = getattr(show, "seller_id", None) if show else None
 
             view = AuctionLiveView(
+                service=service,
                 auction_id=auction.id,
                 seller_id=seller_id,
             )
@@ -102,8 +130,11 @@ class AuctionsCog(commands.Cog):
                 wait=True,
             )
             view.message = message
+            view.start_countdown()
+            service = None
         finally:
-            await service.close()
+            if service is not None:
+                await service.close()
 
     @app_commands.command(name="search_auction", description="Open auction search UI")
     async def search_auction(self, interaction: discord.Interaction):

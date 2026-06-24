@@ -1,18 +1,23 @@
-from bot.repositories.server_repository import ServerRepository
+from sqlalchemy import select
+from db.models import Server
+from db.session import AsyncSessionLocal
 
 
 class ServerService:
-    def __init__(self, repo: ServerRepository | None = None):
-        self.repo = repo or ServerRepository()
-
-    async def get_server(self, server_id: int):
-        return self.repo.get_server(server_id)
-
     async def get_or_create_server(self, guild):
-        return self.repo.get_or_create_server(
-            server_id=guild.id,
-            name=guild.name,
-        )
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Server).where(Server.id == guild.id)
+            )
+            server = result.scalar_one_or_none()
+
+            if server is None:
+                server = Server(id=guild.id, name=guild.name)
+                session.add(server)
+                await session.commit()
+                await session.refresh(server)
+
+            return server
 
     async def close(self):
-        self.repo.close()
+        pass

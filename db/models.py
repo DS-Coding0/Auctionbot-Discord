@@ -52,6 +52,7 @@ class Show(Base):
     status = Column(String(32), nullable=False, default="draft")
     starts_at = Column(DateTime(timezone=True))
     ends_at = Column(DateTime(timezone=True))
+    voice_channel_id = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
@@ -115,6 +116,8 @@ class Auction(Base):
     highest_bidder_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
     status = Column(String(32), nullable=False, default="scheduled")
     ends_at = Column(DateTime(timezone=True))
+    highest_bidder_id = Column(BigInteger, ForeignKey("users.id"))
+    reset_seconds = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

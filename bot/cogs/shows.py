@@ -1,10 +1,26 @@
+import re
+from zoneinfo import ZoneInfo
+
 import discord
 from discord import app_commands
 from discord.ext import commands
+from datetime import datetime
 
 from bot.services.show_service import ShowService
 from bot.services.user_service import UserService
 from bot.services.server_service import ServerService
+
+
+LIVEAUCTION_CATEGORY_ID = 1519260742837342209
+
+
+def slugify_channel_name(value: str) -> str:
+    value = value.lower().strip()
+    value = value.replace(" ", "-")
+    value = re.sub(r"[^a-z0-9\-_]", "", value)
+    value = re.sub(r"-{2,}", "-", value)
+    value = value.strip("-")
+    return value or "show"
 
 
 class ShowsCog(commands.Cog):
@@ -68,12 +84,19 @@ class ShowsCog(commands.Cog):
             await service.close()
 
     @app_commands.command(name="create_show", description="Create a new show")
-    @app_commands.describe(name="Show name", description="Optional description")
+    @app_commands.describe(
+        name="Show name",
+        description="Optional description",
+        date="Date in format YYYY-MM-DD",
+        time="Time in format HH:MM",
+    )
     @app_commands.guild_only()
     async def create_show(
         self,
         interaction: discord.Interaction,
         name: str,
+        date: str,
+        time: str,
         description: str | None = None,
     ):
         service = ShowService()
@@ -84,6 +107,15 @@ class ShowsCog(commands.Cog):
 
             if interaction.guild is None or interaction.guild_id is None:
                 await interaction.followup.send("This command can only be used in a server.")
+                return
+
+            try:
+                starts_at = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+                starts_at = starts_at.replace(tzinfo=ZoneInfo("Europe/Berlin"))
+            except ValueError:
+                await interaction.followup.send(
+                    "Invalid date/time format. Use date as YYYY-MM-DD and time as HH:MM."
+                )
                 return
 
             await servers.get_or_create_server(interaction.guild)
@@ -98,9 +130,12 @@ class ShowsCog(commands.Cog):
                 seller_id=seller_db_user.id,
                 name=name,
                 description=description,
+                starts_at=starts_at,
             )
 
-            await interaction.followup.send(f"Created show #{show.id}: {show.name}")
+            await interaction.followup.send(
+                f"Created show #{show.id}: {show.name} at {starts_at.strftime('%d-%m-%Y %H:%M')}"
+            )
         finally:
             await service.close()
             await users.close()
@@ -191,6 +226,68 @@ class ShowsCog(commands.Cog):
                 await interaction.followup.send(f"Deleted show #{show_id}.")
             else:
                 await interaction.followup.send("Delete failed.")
+        finally:
+            await service.close()
+            await users.close()
+    
+    @app_commands.command(name="start_show", description="Start your show and create a live voice channel")
+    @app_commands.describe(show_id="Show ID")
+    @app_commands.guild_only()
+    async def start_show(self, interaction: discord.Interaction, show_id: int):
+        service = ShowService()
+        users = UserService()
+
+        try:
+            await interaction.response.defer(ephemeral=True)
+
+            if interaction.guild is None:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+
+            show = await service.get_show(show_id)
+            if not show:
+                await interaction.followup.send("Show not found.")
+                return
+
+            seller_db_user = await users.get_or_create_from_discord_user(
+                interaction.user,
+                role="seller",
+            )
+
+            if show.seller_id != seller_db_user.id:
+                await interaction.followup.send("You are not allowed to start this show.")
+                return
+
+            if show.status == "live":
+                await interaction.followup.send("This show is already live.")
+                return
+
+            category = interaction.guild.get_channel(LIVEAUCTION_CATEGORY_ID)
+            if not isinstance(category, discord.CategoryChannel):
+                await interaction.followup.send("Liveauction category not found.")
+                return
+
+            if not interaction.guild.me.guild_permissions.manage_channels:
+                await interaction.followup.send("I need 'Manage Channels' permission.")
+                return
+
+            show_part = slugify_channel_name(show.name)[:70]
+            user_part = slugify_channel_name(interaction.user.name)[:25]
+            channel_name = f"{show_part}-{user_part}"[:100]
+
+            voice_channel = await category.create_voice_channel(
+                name=channel_name,
+                reason=f"Show #{show.id} started by {interaction.user}",
+            )
+
+            updated = await service.start_show(
+                show_id=show_id,
+                voice_channel_id=voice_channel.id,
+            )
+
+            await interaction.followup.send(
+                f"Show #{updated.id} started. Voice channel created: {voice_channel.mention}"
+            )
         finally:
             await service.close()
             await users.close()
