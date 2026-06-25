@@ -291,6 +291,78 @@ class ShowsCog(commands.Cog):
         finally:
             await service.close()
             await users.close()
+    
+    @app_commands.command(name="end_show", description="End your live show and delete its voice channel")
+    @app_commands.describe(show_id="Show ID")
+    @app_commands.guild_only()
+    async def end_show(self, interaction: discord.Interaction, show_id: int):
+        service = ShowService()
+        users = UserService()
+
+        try:
+            await interaction.response.defer(ephemeral=True)
+
+            if interaction.guild is None:
+                await interaction.followup.send("This command can only be used in a server.")
+                return
+
+            show = await service.get_show(show_id)
+            if not show:
+                await interaction.followup.send("Show not found.")
+                return
+
+            seller_db_user = await users.get_or_create_from_discord_user(
+                interaction.user,
+                role="seller",
+            )
+
+            if show.seller_id != seller_db_user.id:
+                await interaction.followup.send("You are not allowed to end this show.")
+                return
+
+            if show.status != "live":
+                await interaction.followup.send("This show is not currently live.")
+                return
+
+            bot_member = interaction.guild.get_member(self.bot.user.id) if self.bot.user else None
+            if bot_member is None or not bot_member.guild_permissions.manage_channels:
+                await interaction.followup.send("I need 'Manage Channels' permission.")
+                return
+
+            deleted_channel_name = None
+
+            if getattr(show, "voice_channel_id", None):
+                channel = interaction.guild.get_channel(show.voice_channel_id)
+
+                if channel is None and self.bot is not None:
+                    channel = self.bot.get_channel(show.voice_channel_id)
+
+                if channel is not None:
+                    deleted_channel_name = channel.name
+                    await channel.delete(reason=f"Show #{show.id} ended by {interaction.user}")
+
+            updated = await service.update_show(
+                show_id,
+                status="ended",
+                voice_channel_id=None,
+            )
+
+            if updated is None:
+                await interaction.followup.send("Failed to end show.")
+                return
+
+            if deleted_channel_name:
+                await interaction.followup.send(
+                    f"Show #{updated.id} ended. Voice channel `{deleted_channel_name}` was deleted."
+                )
+            else:
+                await interaction.followup.send(
+                    f"Show #{updated.id} ended. No voice channel was found to delete."
+                )
+
+        finally:
+            await service.close()
+            await users.close()
 
 
 async def setup(bot: commands.Bot):

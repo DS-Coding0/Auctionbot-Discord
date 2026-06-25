@@ -43,12 +43,6 @@ class ShowService:
             voice_channel_id=voice_channel_id,
         )
 
-    async def end_show(self, show_id: int):
-        return await self.repo.update_show(
-            show_id,
-            status="ended",
-        )
-
     async def delete_show(self, show_id: int):
         return await self.repo.delete_show(show_id)
 

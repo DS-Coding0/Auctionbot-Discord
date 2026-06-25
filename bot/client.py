@@ -15,6 +15,7 @@ class BotClient(commands.Bot):
 
         super().__init__(command_prefix=command_prefix, intents=intents, **kwargs)
         self.auction_loops = AuctionLoops(self)
+        self.remove_command("help")
 
     async def setup_hook(self):
         await self.load_extension("bot.cogs.auctions")
@@ -24,6 +25,7 @@ class BotClient(commands.Bot):
         await self.load_extension("bot.cogs.ratings")
         await self.load_extension("bot.cogs.registration")
         await self.load_extension("bot.cogs.shows")
+        await self.load_extension("bot.cogs.help")
 
         if not self.auction_loops.watch_auctions.is_running():
             self.auction_loops.watch_auctions.start()
