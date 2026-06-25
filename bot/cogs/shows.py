@@ -87,7 +87,7 @@ class ShowsCog(commands.Cog):
     @app_commands.describe(
         name="Show name",
         description="Optional description",
-        date="Date in format YYYY-MM-DD",
+        date="Date in format DD-MM-YYYY",
         time="Time in format HH:MM",
     )
     @app_commands.guild_only()
@@ -110,11 +110,11 @@ class ShowsCog(commands.Cog):
                 return
 
             try:
-                starts_at = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+                starts_at = datetime.strptime(f"{date} {time}", "%d-%m-%Y %H:%M")
                 starts_at = starts_at.replace(tzinfo=ZoneInfo("Europe/Berlin"))
             except ValueError:
                 await interaction.followup.send(
-                    "Invalid date/time format. Use date as YYYY-MM-DD and time as HH:MM."
+                    "Invalid date/time format. Use date as DD-MM-YYYY and time as HH:MM."
                 )
                 return
 

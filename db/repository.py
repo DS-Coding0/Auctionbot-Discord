@@ -124,7 +124,7 @@ class Repository:
         if status is not None:
             stmt = stmt.where(Show.status == status)
 
-        stmt = stmt.order_by(Show.created_at.desc())
+        stmt = stmt.order_by(Show.starts_at.desc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
