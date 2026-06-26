@@ -124,10 +124,10 @@ class Repository:
         if status is not None:
             stmt = stmt.where(Show.status == status)
 
-        stmt = stmt.order_by(Show.starts_at.desc())
+        stmt = select(Show).where(Show.status == "draft").order_by(Show.starts_at.desc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
-
+    
     async def get_show(self, show_id: int) -> Show | None:
         db = await self._get_db()
         return await db.get(Show, show_id)
